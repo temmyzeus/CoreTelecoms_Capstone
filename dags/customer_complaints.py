@@ -151,7 +151,7 @@ def customer_complaints_pipeline():
         To Do: Add Task Document here
         """
         ds = ds.replace("-", "_")
-        postgres_to_s3_as_parquet(
+        tmp_file_download_dir = postgres_to_s3_as_parquet(
             aws_conn_id=CORE_TELECOMS_AWS_CONN_ID,
             postgres_conn_id=CDE_CORE_TELECOM_POSTGRES_CONN_ID,
             schema="customer_complaints",
@@ -159,6 +159,7 @@ def customer_complaints_pipeline():
             bucket_name=TARGET_S3_BUCKET,
             s3_key=f"raw/website_forms/web_form_request_{ds}.parquet"
         )
+        return tmp_file_download_dir
 
     create_customers_landing_table = SQLExecuteQueryOperator(
         task_id="create_customers_landing_table",

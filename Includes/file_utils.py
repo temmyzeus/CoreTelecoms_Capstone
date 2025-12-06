@@ -84,9 +84,9 @@ def postgres_to_s3_as_parquet(
     print(f"SQL Alchemy URI: {pg_hook.sqlalchemy_url}")
     engine = create_engine(pg_hook.sqlalchemy_url, connect_args={"options": "-c statement_timeout=300000"})
 
-    s3_key = os.path.join("s3://", bucket_name, s3_key)
+    s3_uri = os.path.join("s3://", bucket_name, s3_key)
 
-    filename = os.path.basename(s3_key)
+    filename = os.path.basename(s3_uri)
     filename_without_ext, ext = os.path.splitext(filename)
 
     os.makedirs("/tmp/web_forms/", exist_ok=True)
@@ -96,6 +96,7 @@ def postgres_to_s3_as_parquet(
     print(f"Reading {schema}.{table} in chunks of {chunk_size}")
 
     last_ctid = None
+    saved_parquet_file_paths = []
     
     i = 0
 
@@ -121,9 +122,15 @@ def postgres_to_s3_as_parquet(
         last_ctid = df_chunk['ctid'].iloc[-1]
         # Drop ctid before returning
         df_chunk = df_chunk.drop(columns=['ctid'])
-        df_chunk.to_parquet(os.path.join(tmp_dir, f"chunk_{i}.parquet"), index=False)
+        saved_parquet_file_path = os.path.join(tmp_dir, f"chunk_{i}.parquet")
+        df_chunk.to_parquet(saved_parquet_file_path, index=False)
         i += 1
+        saved_parquet_file_paths.append(saved_parquet_file_path)
         print(f"Fetched chunk ending at ctid={last_ctid}")
+
+    for saved_file_path in saved_parquet_file_paths:
+        save_as_s3_key = os.path.join(s3_key, os.path.basename(saved_file_path))
+        S3Hook(aws_conn_id=aws_conn_id).load_file(saved_file_path, save_as_s3_key, bucket_name)
     
     return tmp_dir
 
