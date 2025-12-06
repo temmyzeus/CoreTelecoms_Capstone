@@ -14,7 +14,9 @@ from Includes.file_utils import (
 
 SOURCE_S3_BUCKET: str = "core-telecoms-data-lake"
 TARGET_S3_BUCKET: str = "coretelecoms-data-lake-capstone"
+CORE_TELECOMS_AWS_CONN_ID: str = "CORE_TELECOM_AWS_CONN"
 SNOWFLAKE_CONN_ID: str = "CORE_TELECOM_SNOWFLAKE_CONN"
+CDE_CORE_TELECOM_POSTGRES_CONN_ID: str = "CDE_CORE_TELECOM_POSTGRES_CONN"
 
 default_args: dict = {
     "owner": "Temiloluwa Awoyele"
@@ -144,17 +146,18 @@ def customer_complaints_pipeline():
         )
 
     @task
-    def website_forms_postgres_to_s3_parquet():
+    def website_forms_postgres_to_s3_parquet(*, ds):
         """
         To Do: Add Task Document here
         """
+        ds = ds.replace("-", "_")
         postgres_to_s3_as_parquet(
-            aws_conn_id="CORE_TELECOM_AWS_CONN",
-            postgres_conn_id="CDE_CORE_TELECOM_POSTGRES_CONN",
-            sql_query="SELECT * FROM postgres.customer_complaints.web_form_request_2025_11_20",
-            bucket_name=S3_BUCKET,
-            s3_key="website_forms/web_form_request_2025_11_20.parquet",
-            mode="overwrite"
+            aws_conn_id=CORE_TELECOMS_AWS_CONN_ID,
+            postgres_conn_id=CDE_CORE_TELECOM_POSTGRES_CONN_ID,
+            schema="customer_complaints",
+            table=f"web_form_request_{ds}",
+            bucket_name=TARGET_S3_BUCKET,
+            s3_key=f"raw/website_forms/web_form_request_{ds}.parquet"
         )
 
     create_customers_landing_table = SQLExecuteQueryOperator(
@@ -304,7 +307,7 @@ def customer_complaints_pipeline():
     call_logs_local_tmp_file = fetch_call_logs_from_s3_to_local()
     social_media_local_tmp_file = fetch_social_media_from_s3_to_local()
     upload_agents_data_to_s3_as_parquet()
-    # website_forms_postgres_to_s3_parquet()
+    website_forms_postgres_to_s3_parquet()
 
     uploaded_customers_parquet = upload_customers_parquet_to_s3(customer_local_tmp_file)
     uploaded_call_logs_parquet = upload_call_logs_parquet_to_s3(call_logs_local_tmp_file)
