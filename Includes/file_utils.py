@@ -1,7 +1,9 @@
 import os
+import tempfile
 
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from airflow.providers.postgres.hooks.postgres import PostgresHook
+from sqlalchemy import create_engine
 
 
 def download_file_from_s3_to_local(
@@ -65,23 +67,65 @@ def upload_to_s3_as_parquet(
 def postgres_to_s3_as_parquet(
     aws_conn_id: str,
     postgres_conn_id: str,
-    sql_query: str,
+    schema: str,
+    table: str,
     bucket_name: str,
     s3_key: str,
-    mode: str = "overwrite"
+    chunk_size: int = 50_000
 ):
+    """
+    Read a large table in chunks to avoid statement_timeout and save as parquet
+    """
+
+    import pandas as pd
+    import awswrangler as wr
+
     pg_hook = PostgresHook(postgres_conn_id=postgres_conn_id)
+    print(f"SQL Alchemy URI: {pg_hook.sqlalchemy_url}")
+    engine = create_engine(pg_hook.sqlalchemy_url, connect_args={"options": "-c statement_timeout=300000"})
+
+    s3_key = os.path.join("s3://", bucket_name, s3_key)
+
+    filename = os.path.basename(s3_key)
+    filename_without_ext, ext = os.path.splitext(filename)
+
+    os.makedirs("/tmp/web_forms/", exist_ok=True)
+    tmp_dir = tempfile.TemporaryDirectory(suffix=".parquet", prefix=f"/tmp/web_forms/{filename_without_ext}_", delete=False)
+    tmp_dir = tmp_dir.name
+
+    print(f"Reading {schema}.{table} in chunks of {chunk_size}")
+
+    last_ctid = None
     
-    data_return_value = upload_to_s3_as_parquet(
-        aws_conn_id=aws_conn_id,
-        bucket_name=bucket_name,
-        s3_key=s3_key,
-        df=pg_hook.get_df(sql_query),
-        mode=mode
-    )
+    i = 0
 
-    return data_return_value
-
+    while True:
+        if last_ctid is None:
+            sql = f"""
+                SELECT ctid, * FROM {schema}.{table}
+                ORDER BY ctid
+                LIMIT {chunk_size}
+            """
+        else:
+            sql = f"""
+                SELECT ctid, * FROM {schema}.{table}
+                WHERE ctid > '{last_ctid}'
+                ORDER BY ctid
+                LIMIT {chunk_size}
+            """
+        
+        df_chunk = pd.read_sql(sql, engine)
+        if df_chunk.empty:
+            break
+            
+        last_ctid = df_chunk['ctid'].iloc[-1]
+        # Drop ctid before returning
+        df_chunk = df_chunk.drop(columns=['ctid'])
+        df_chunk.to_parquet(os.path.join(tmp_dir, f"chunk_{i}.parquet"), index=False)
+        i += 1
+        print(f"Fetched chunk ending at ctid={last_ctid}")
+    
+    return tmp_dir
 
 def upload_google_sheet_to_s3_as_parquet(
     aws_conn_id: str,

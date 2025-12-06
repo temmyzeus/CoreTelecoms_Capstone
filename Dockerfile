@@ -8,3 +8,8 @@ RUN pip install --no-cache-dir \
     oauth2client==4.1.3 \
     apache-airflow-providers-snowflake==6.5.4 \
     apache-airflow-providers-dbt-cloud==4.6.0
+
+RUN python -m venv dbt_venv && source dbt_venv/bin/activate && \
+    pip install --no-cache-dir dbt-snowflake && deactivate
+
+RUN pip install --no-cache-dir astronomer-cosmos
