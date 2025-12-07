@@ -59,7 +59,26 @@ def customer_complaints_pipeline():
     venv_dbt_task_group = DbtTaskGroup(
         group_id = "Staging_Transformations",
         project_config=ProjectConfig(
-            dbt_project_path=DBT_PROJECT_PATH
+            dbt_project_path=DBT_PROJECT_PATH,
+            dbt_vars={
+                "run_date": "{{ ds }}"
+            }
+        ),
+        profile_config=profile_config,
+        execution_config = ExecutionConfig(
+            execution_mode=ExecutionMode.VIRTUALENV,
+            dbt_executable_path=os.path.join(os.environ["AIRFLOW_HOME"], "dbt_venv", "bin", "dbt"),
+            virtualenv_dir="/opt/airflow/dbt_venv"
+        )
+    )
+
+    venv_dbt_gold_task_group = DbtTaskGroup(
+        group_id = "Gold_Transformations",
+        project_config=ProjectConfig(
+            dbt_project_path=DBT_PROJECT_PATH,
+            dbt_vars={
+                "run_date": "{{ ds }}"
+            }
         ),
         profile_config=profile_config,
         execution_config = ExecutionConfig(
@@ -167,8 +186,8 @@ def customer_complaints_pipeline():
         To Do: Add Task Document here
         """
         upload_google_sheet_to_s3_as_parquet(
-            aws_conn_id="CORE_TELECOM_AWS_CONN",
-            creds_file="core-telecoms-service.json",
+            aws_conn_id=CORE_TELECOMS_AWS_CONN_ID,
+            service_cred_json=Variable.get("GOOGLE_SHEETS_SERVICE_JSON"),
             sheet_id="17IXo7TjDSSHaFobGG9hcqgbsNKTaqgyctWGnwDeNkIQ",
             sheet_title="agents",
             bucket_name=TARGET_S3_BUCKET,
@@ -274,6 +293,32 @@ def customer_complaints_pipeline():
         """
     )
 
+    create_webforms_landing_table = SQLExecuteQueryOperator(
+        task_id="create_webforms_landing_table",
+        conn_id=SNOWFLAKE_CONN_ID,
+        sql="""
+            CREATE OR REPLACE TABLE CUSTOMER_COMPLAINTS.BRONZE.WEB_FORMS
+            COPY GRANTS
+            USING TEMPLATE (
+                SELECT
+                    ARRAY_AGG(OBJECT_CONSTRUCT(*))
+                    WITHIN GROUP (ORDER BY order_id)
+                FROM TABLE(
+                    INFER_SCHEMA(
+                    LOCATION => '@CUSTOMER_COMPLAINTS.BRONZE.CORE_TELECOMS_WEBFORMS/web_form_request_{{ ds.replace('-', '_') }}.parquet'
+                    , FILE_FORMAT => 'CUSTOMER_COMPLAINTS.BRONZE.BRONZE_PARQUET_FORMAT'
+                    , IGNORE_CASE => TRUE
+                    , KIND => 'STANDARD'
+                    )
+                )
+            );
+
+            ALTER TABLE CUSTOMER_COMPLAINTS.BRONZE.WEB_FORMS
+            ADD COLUMN IF NOT EXISTS dag_run_date DATE,
+            IF NOT EXISTS load_timestamp TIMESTAMP_NTZ;
+        """
+    )
+
     load_customers_data_to_snowflake = SQLExecuteQueryOperator(
         task_id="load_customers_data_to_snowflake",
         conn_id=SNOWFLAKE_CONN_ID,
@@ -335,6 +380,39 @@ def customer_complaints_pipeline():
         """
     )
 
+    load_webforms_data_to_snowflake = SQLExecuteQueryOperator(
+        task_id="load_webforms_data_to_snowflake",
+        conn_id=SNOWFLAKE_CONN_ID,
+        sql="""
+            INSERT INTO CUSTOMER_COMPLAINTS.BRONZE.WEB_FORMS (
+                COLUMN1,
+                REQUEST_ID,
+                "CUSTOMER ID",
+                "COMPLAINT_CATEGO RY",
+                "AGENT ID",
+                RESOLUTIONSTATUS,
+                REQUEST_DATE,
+                RESOLUTION_DATE,
+                WEBFORMGENERATIONDATE,
+                DAG_RUN_DATE,
+                LOAD_TIMESTAMP
+            )
+            SELECT
+                $1:Column1,
+                $1:request_id,
+                $1:"customeR iD",
+                $1:"COMPLAINT_catego ry",
+                $1:agent ID,
+                $1:resolutionstatus,
+                $1:request_date,
+                $1:resolution_date,
+                $1:webFormGenerationDate,
+                '{{ ds }}' :: DATE,
+                CURRENT_TIMESTAMP
+            FROM @CUSTOMER_COMPLAINTS.BRONZE.CORE_TELECOMS_WEBFORMS/web_form_request_{{ ds.replace('-', '_') }}.parquet;
+        """
+    )
+
     customer_local_tmp_file = fetch_customers_data_from_s3_to_local()
     call_logs_local_tmp_file = fetch_call_logs_from_s3_to_local()
     social_media_local_tmp_file = fetch_social_media_from_s3_to_local()
@@ -348,7 +426,8 @@ def customer_complaints_pipeline():
     uploaded_customers_parquet >> create_customers_landing_table >> load_customers_data_to_snowflake
     uploaded_call_logs_parquet >> create_call_logs_landing_table >> load_call_logs_data_to_snowflake
     uploaded_social_media_parquet >> create_social_media_landing_table >> load_social_media_data_to_snowflake
+    web_forms_to_s3 >> create_webforms_landing_table >> load_webforms_data_to_snowflake
 
-    [load_customers_data_to_snowflake, load_call_logs_data_to_snowflake, load_social_media_data_to_snowflake, agents_to_s3, web_forms_to_s3] >> venv_dbt_task_group
+    [load_customers_data_to_snowflake, load_call_logs_data_to_snowflake, load_social_media_data_to_snowflake, load_webforms_data_to_snowflake] >> venv_dbt_task_group
 
 customer_complaints_pipeline()

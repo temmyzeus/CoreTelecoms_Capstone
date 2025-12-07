@@ -1,0 +1,19 @@
+
+version: 2
+
+models:
+  - name: STG_CUSTOMERS
+    description: "Cleaned Customers Data"
+    columns:
+      - name: id
+        description: "The primary key for this table"
+        schema: "SILVER"
+
+#   - name: my_second_dbt_model
+#     description: "A starter dbt model"
+#     columns:
+#       - name: id
+#         description: "The primary key for this table"
+#         data_tests:
+#           - unique
+#           - not_null

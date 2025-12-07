@@ -1,3 +1,4 @@
+import json
 import os
 import tempfile
 
@@ -136,7 +137,7 @@ def postgres_to_s3_as_parquet(
 
 def upload_google_sheet_to_s3_as_parquet(
     aws_conn_id: str,
-    creds_file: str,
+    service_cred_json: str,
     sheet_id: str,
     sheet_title: str,
     bucket_name: str,
@@ -152,7 +153,10 @@ def upload_google_sheet_to_s3_as_parquet(
     scope = ['https://www.googleapis.com/auth/spreadsheets']
 
     # Path to your service account JSON key file
-    creds_file = 'core-telecoms-service.json'
+    creds_file = 'service.json'
+
+    with open(creds_file, mode="w") as f:
+        json.dump(service_cred_json, f, indent=4)
 
     # Authenticate with Google Sheets
     creds = ServiceAccountCredentials.from_json_keyfile_name(creds_file, scope)
