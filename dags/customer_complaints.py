@@ -1,8 +1,13 @@
+import os
+from pathlib import Path
+
 from airflow.sdk import dag, task, Variable
 from airflow.providers.common.io.operators.file_transfer import FileTransferOperator
 from airflow.providers.amazon.aws.transfers.google_api_to_s3 import GoogleApiToS3Operator
 from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
 from airflow.providers.snowflake.transfers.copy_into_snowflake import CopyFromExternalStageToSnowflakeOperator
+from cosmos import DbtTaskGroup, ExecutionConfig, ExecutionMode, ProfileConfig, ProjectConfig
+from cosmos.profiles import SnowflakeUserPasswordProfileMapping
 import pendulum
 
 from Includes.file_utils import (
@@ -17,6 +22,19 @@ TARGET_S3_BUCKET: str = "coretelecoms-data-lake-capstone"
 CORE_TELECOMS_AWS_CONN_ID: str = "CORE_TELECOM_AWS_CONN"
 SNOWFLAKE_CONN_ID: str = "CORE_TELECOM_SNOWFLAKE_CONN"
 CDE_CORE_TELECOM_POSTGRES_CONN_ID: str = "CDE_CORE_TELECOM_POSTGRES_CONN"
+
+DEFAULT_DBT_ROOT_PATH = Path(__file__).parent / "dbt"
+DBT_ROOT_PATH = Path(os.getenv("DBT_ROOT_PATH", DEFAULT_DBT_ROOT_PATH))
+DBT_PROJECT_NAME = os.getenv("DBT_PROJECT_NAME", "core_telecoms")
+DBT_PROJECT_PATH = DBT_ROOT_PATH / DBT_PROJECT_NAME
+
+profile_config = ProfileConfig(
+    profile_name="default",
+    target_name="dev",
+    profile_mapping=SnowflakeUserPasswordProfileMapping(
+        conn_id=SNOWFLAKE_CONN_ID
+    )
+)
 
 default_args: dict = {
     "owner": "Temiloluwa Awoyele"
@@ -37,6 +55,19 @@ def customer_complaints_pipeline():
     """
     ### CoreTelecoms Unified Data Platform Pipeline
     """
+
+    venv_dbt_task_group = DbtTaskGroup(
+        group_id = "Staging_Transformations",
+        project_config=ProjectConfig(
+            dbt_project_path=DBT_PROJECT_PATH
+        ),
+        profile_config=profile_config,
+        execution_config = ExecutionConfig(
+            execution_mode=ExecutionMode.VIRTUALENV,
+            dbt_executable_path=os.path.join(os.environ["AIRFLOW_HOME"], "dbt_venv", "bin", "dbt"),
+            virtualenv_dir="/opt/airflow/dbt_venv"
+        )
+    )
 
     @task
     def fetch_customers_data_from_s3_to_local():
@@ -307,8 +338,8 @@ def customer_complaints_pipeline():
     customer_local_tmp_file = fetch_customers_data_from_s3_to_local()
     call_logs_local_tmp_file = fetch_call_logs_from_s3_to_local()
     social_media_local_tmp_file = fetch_social_media_from_s3_to_local()
-    upload_agents_data_to_s3_as_parquet()
-    website_forms_postgres_to_s3_parquet()
+    agents_to_s3 = upload_agents_data_to_s3_as_parquet()
+    web_forms_to_s3 = website_forms_postgres_to_s3_parquet()
 
     uploaded_customers_parquet = upload_customers_parquet_to_s3(customer_local_tmp_file)
     uploaded_call_logs_parquet = upload_call_logs_parquet_to_s3(call_logs_local_tmp_file)
@@ -317,6 +348,7 @@ def customer_complaints_pipeline():
     uploaded_customers_parquet >> create_customers_landing_table >> load_customers_data_to_snowflake
     uploaded_call_logs_parquet >> create_call_logs_landing_table >> load_call_logs_data_to_snowflake
     uploaded_social_media_parquet >> create_social_media_landing_table >> load_social_media_data_to_snowflake
-    # agents_data_to_s3
+
+    [load_customers_data_to_snowflake, load_call_logs_data_to_snowflake, load_social_media_data_to_snowflake, agents_to_s3, web_forms_to_s3] >> venv_dbt_task_group
 
 customer_complaints_pipeline()
