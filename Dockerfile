@@ -13,3 +13,9 @@ RUN python -m venv dbt_venv && source dbt_venv/bin/activate && \
     pip install --no-cache-dir dbt-snowflake && deactivate
 
 RUN pip install --no-cache-dir astronomer-cosmos
+
+USER root
+
+RUN chmod 777 -R "$AIRFLOW_HOME/dbt_venv" "/tmp/.cache"
+
+USER airflow
