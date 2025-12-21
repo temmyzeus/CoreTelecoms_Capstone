@@ -7,7 +7,6 @@
 
 ## 📋 Table of Contents
 - [Project Overview](#project-overview)
-- [Business Problem](#business-problem)
 - [Solution Architecture](#solution-architecture)
 - [Technology Stack](#technology-stack)
 - [Project Structure](#project-structure)
@@ -24,48 +23,23 @@
 - [Future Enhancements](#future-enhancements)
 
 ---
-
 ## 🎯 Project Overview
 
-The **CoreTelecoms Unified Customer Experience Data Platform** is a production-grade, end-to-end data engineering solution designed to consolidate customer complaint data from multiple disparate sources into a unified, analytics-ready data warehouse. This platform enables CoreTelecoms to gain actionable insights into customer complaints, reduce churn, and improve customer satisfaction.
+The **CoreTelecoms Unified Customer Experience Data Platform** is a production-grade, end-to-end data engineering solution designed to consolidate customer complaint data from multiple sources into a unified, analytics-ready data warehouse. This platform enables CoreTelecoms to gain actionable insights into customer complaints, reduce churn, and improve customer satisfaction.
 
-### Key Achievements
-- ✅ Unified data from 5+ diverse sources (CSV, JSON, PostgreSQL, Google Sheets, S3)
+### Achievements
+- ✅ Unified data from 5+ diverse sources (CSV, JSON, PostgreSQL, Google Sheets)
 - ✅ Automated daily data ingestion and transformation pipelines
 - ✅ Production-grade orchestration with Apache Airflow
-- ✅ Cloud-native architecture on AWS
 - ✅ Infrastructure fully automated with Terraform
 - ✅ Containerized deployment with Docker
-- ✅ Data quality and testing with dbt
-- ✅ CI/CD pipeline for automated deployments
 
 ---
 
-## 💼 Business Problem
-
-CoreTelecoms, a leading US telecommunications company, faced a critical customer retention crisis due to inefficient complaint management:
-
-### Challenges
-- **Fragmented Data Sources**: Customer complaints scattered across social media, call centers, and web forms
-- **Data Silos**: No unified view of customer complaints
-- **Manual Processes**: Reporting teams manually compiling spreadsheets
-- **Delayed Insights**: No real-time visibility into complaint trends
-- **High Customer Churn**: Inability to identify and resolve complaints quickly
-- **Data Quality Issues**: Inconsistent formats, naming conventions, and missing data
-
-### Impact
-- Lost revenue due to customer churn
-- Frustrated management without actionable insights
-- Inefficient customer service operations
-- Inability to identify complaint patterns and root causes
-
----
-
-## 🏗️ Solution Architecture
+## 🏗️ Architecture
+![Architecture](./artifacts/images/HLD.jpg)
 
 The platform implements a modern **Medallion Architecture** (Bronze → Silver → Gold) with the following layers:
-
-### Architecture Diagram
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -152,19 +126,16 @@ The platform implements a modern **Medallion Architecture** (Bronze → Silver �
 - **Terraform**: Infrastructure as Code (IaC)
 - **Docker**: Containerization
 - **Docker Hub**: Container registry
-- **GitHub Actions**: CI/CD pipeline
 
 ### Cloud Platform
 - **AWS Services**:
   - S3 (Data Lake)
   - IAM (Access Management)
   - SSM Parameter Store (Secrets Management)
-  - EC2/ECS (Compute - deployment target)
 
 ### APIs & Integrations
 - **Google Sheets API**: Agent data extraction
 - **AWS SDK (boto3)**: AWS service interactions
-- **Snowflake Connector**: Data warehouse operations
 
 ---
 
@@ -180,12 +151,8 @@ CoreTelecoms_Capstone/
 │           ├── dbt_project.yml             # dbt configuration
 │           ├── models/
 │           │   ├── bronze/                 # Staging models
-│           │   │   ├── STG_CALL_LOGS.sql
-│           │   │   ├── STG_CUSTOMERS.sql
-│           │   │   ├── STG_SOCIAL_MEDIA.sql
-│           │   │   ├── STG_WEBFORMS.sql
-│           │   │   └── schema.yml
 │           │   └── silver/                 # Analytics models
+                └── gold/
 │           ├── macros/                     # Custom dbt macros
 │           ├── tests/                      # Data quality tests
 │           └── snapshots/                  # SCD Type 2 tracking
@@ -217,119 +184,113 @@ CoreTelecoms_Capstone/
 ## 📊 Data Sources
 
 ### 1. Customers Data
-- **Description**: Master customer data with demographics
+- **Description**: Customer data with attributes like customer id, name, gender, phone, location etc.
 - **Format**: CSV
-- **Location**: AWS S3 (`core-telecoms-data-lake/customers/`)
+- **Location**: AWS S3 Bucket
 - **Frequency**: Static dataset
 - **Key Fields**: customer_id, name, gender, date_of_birth, email, address
 
 ### 2. Call Center Logs
-- **Description**: Daily customer call records with complaint details
+- **Description**: Daily customer call log with complaint type, agent ID, resolution status, and duration.
 - **Format**: CSV
-- **Location**: AWS S3 (`core-telecoms-data-lake/call logs/`)
-- **Frequency**: Daily incremental
+- **Location**: AWS S3
+- **Frequency**: It's a Daily Populated Dataset (Daily incremental)
 - **Key Fields**: call_id, customer_id, complaint_category, agent_id, resolution_status, call_duration
 - **Naming Pattern**: `call_logs_day_YYYY-MM-DD.csv`
 
 ### 3. Social Media Complaints
-- **Description**: Customer complaints from social platforms
+- **Description**: Complaints across social media platforms, containing customer & agent id, platform, issue type etc.
 - **Format**: JSON
-- **Location**: AWS S3 (`core-telecoms-data-lake/social_medias/`)
-- **Frequency**: Daily incremental
+- **Location**: AWS S3
+- **Frequency**: It's a Daily Populated Dataset (Daily incremental)
 - **Key Fields**: complaint_id, customer_id, platform, complaint_category, agent_id, resolution_status
 - **Naming Pattern**: `media_complaint_day_YYYY-MM-DD.json`
 
 ### 4. Website Complaint Forms
-- **Description**: Customer-submitted web forms
-- **Format**: PostgreSQL tables
-- **Location**: RDS PostgreSQL (schema: `customer_complaints`)
-- **Frequency**: Daily incremental (separate table per day)
+- **Description**: Customer-submitted forms with customer id, agent id, complaint type, and resolution status.
+- **Format**: PostgreSQL Database Table
+- **Location**: In a Transactional Postgres Database
+  - Schema name - customer_complaints
+  - Tables
+    - Web_form_request_2025_11_20
+    - Web_form_request_2025_11_21
+    - Web_form_request_2025_11_22
+    - Web_form_request_2025_11_23
+- **Frequency**: It's a Daily Populated Dataset into different table for each day.
 - **Key Fields**: request_id, customer_id, complaint_category, agent_id, resolution_status
-- **Naming Pattern**: `web_form_request_YYYY_MM_DD`
 
-### 5. Customer Service Agents
-- **Description**: Agent lookup table
-- **Format**: Google Sheets
+### 5. Agents
+- **Description**: Lookup table for customer care agents.
+- **Format**: Google Spread Sheets
 - **Location**: Private Google Sheet
 - **Frequency**: Static dataset
 - **Key Fields**: agent_id, name, department, hire_date
 
 ---
 
-## 🔄 Data Pipeline Architecture
+## 📐 Data Modeling
 
-### Pipeline Workflow (`customer_complaints_pipeline`)
+#### Bronze Layer (Staging Models)
+- **Purpose**: Raw data from source applications without any changes or modifications.
+- **Tables Prefix**: RAW_
+- **Bronze Data Model (As it is from application)**
+![Bronze Layer](./artifacts/images/Data_Model-Raw.jpg)
 
-#### **Phase 1: Data Extraction**
-```python
-1. fetch_customers_data_from_s3_to_local()
-   - Downloads customer CSV from S3
-   - Returns local file path
+##### `STG_CUSTOMERS.sql`
+- **Purpose**: Clean and standardize customer master data
+- **Transformations**:
+  - Standardize column names (remove spaces, special characters)
+  - Parse and validate email addresses
+  - Standardize date formats
+  - Remove duplicates based on customer_id
+  - Add data quality flags
 
-2. fetch_call_logs_from_s3_to_local()
-   - Downloads daily call logs (date-partitioned)
-   - Returns local file path
+##### `STG_CALL_LOGS.sql`
+- **Purpose**: Clean daily call center logs
+- **Transformations**:
+  - Standardize complaint categories
+  - Calculate call duration
+  - Parse call timestamps
+  - Validate foreign keys (customer_id, agent_id)
+  - Handle null resolution statuses
 
-3. fetch_social_media_from_s3_to_local()
-   - Downloads daily social media JSON (date-partitioned)
-   - Returns local file path
+##### `STG_SOCIAL_MEDIA.sql`
+- **Purpose**: Clean social media complaints
+- **Transformations**:
+  - Standardize platform names
+  - Parse JSON nested fields
+  - Validate date ranges
+  - Standardize complaint categories
+  - Handle missing agent assignments
 
-4. upload_agents_data_to_s3_as_parquet()
-   - Extracts from Google Sheets API
-   - Converts to Parquet
-   - Uploads to target S3
+##### `STG_WEBFORMS.sql`
+- **Purpose**: Clean web form submissions
+- **Transformations**:
+  - Standardize column naming from source
+  - Parse request/resolution dates
+  - Validate customer and agent IDs
+  - Deduplicate submissions
+  - Handle form field variations
 
-5. website_forms_postgres_to_s3_parquet()
-   - Extracts from PostgreSQL
-   - Converts to Parquet
-   - Uploads to target S3
-```
+#### Silver Layer
+- **Purpose**: Demonstrates cleaned and standardized tables with:
+  - Fixed column names (removed spaces, standardized naming)
+  - Proper data types
+  - Derived columns (like CALL_DURATION, AGE)
+  - Indexing
+- **Tables Prefix**: STG_ or SILVER_
+- **Silver Data Model (Cleaned and standardized tables)**
+![Silver Layer](./artifacts/images/Data_Model-Silver.jpg)
 
-#### **Phase 2: Raw Data Storage**
-```python
-6. upload_customers_parquet_to_s3()
-7. upload_call_logs_parquet_to_s3()
-8. upload_social_media_parquet_to_s3()
-   - Converts CSV/JSON to Parquet
-   - Stores in S3 with date partitioning
-   - Adds metadata (load_timestamp)
-```
-
-#### **Phase 3: Schema Creation (Snowflake Bronze)**
-```sql
-9. create_customers_landing_table
-10. create_call_logs_landing_table
-11. create_social_media_landing_table
-12. create_webforms_landing_table
-    - Uses INFER_SCHEMA for automatic schema detection
-    - Adds audit columns (dag_run_date, load_timestamp)
-```
-
-#### **Phase 4: Data Loading**
-```sql
-13. load_customers_data_to_snowflake
-14. load_call_logs_data_to_snowflake
-15. load_social_media_data_to_snowflake
-16. load_webforms_data_to_snowflake
-    - Loads from S3 external stages
-    - Appends daily data with metadata
-```
-
-#### **Phase 5: dbt Transformations (Silver Layer)**
-```python
-17. DBT_Transformations (DbtTaskGroup)
-    - Cleans and standardizes data
-    - Resolves data quality issues
-    - Creates analytics-ready models
-    - Runs data quality tests
-```
-
-### Pipeline Schedule
-- **Schedule**: `@daily` (runs at midnight UTC)
-- **Catchup**: Enabled (backfills historical dates)
-- **Start Date**: 2025-11-20
-- **End Date**: 2025-11-23
-- **Date Range**: 4 days of historical data processing
+#### Gold Layer
+- **Purpose**: 
+  - FACT_COMPLAINTS: Unified fact table combining all complaint sources (calls, media, web)
+  - DIM_CUSTOMERS: Customer dimension with enriched attributes
+  - DIM_AGENTS: Agent dimension table
+  - AGG_DAILY_COMPLAINTS: Pre-aggregated metrics for fast dashboard queries
+- **Tables Prefix**: FACT_, DIM_, AGG_, MART_
+- **Gold Data Model (Cleaned and standardized tables)**
+![Gold Layer](./artifacts/images/Data_Model-Gold.jpg)
 
 ---
 
@@ -535,147 +496,6 @@ docker-compose exec webserver airflow users create \
 
 ---
 
-## 🎯 Pipeline Orchestration
-
-### Airflow DAG: `customer_complaints_pipeline`
-
-#### Configuration
-```python
-@dag(
-    start_date=pendulum.datetime(2025, 11, 20, tz="UTC"),
-    end_date=pendulum.datetime(2025, 11, 23, tz="UTC"),
-    schedule="@daily",
-    catchup=True,
-    default_args={
-        "owner": "Temiloluwa Awoyele",
-        "retries": 3,
-        "retry_delay": timedelta(minutes=5)
-    },
-    tags=["core-telecoms", "complaints-pipeline"]
-)
-```
-
-#### Task Dependencies
-```
-┌────────────────────────────────────────────────────────────────┐
-│                    EXTRACTION TASKS (Parallel)                 │
-├────────────────────────────────────────────────────────────────┤
-│ fetch_customers_data_from_s3_to_local                         │
-│ fetch_call_logs_from_s3_to_local                              │
-│ fetch_social_media_from_s3_to_local                           │
-│ upload_agents_data_to_s3_as_parquet                           │
-│ website_forms_postgres_to_s3_parquet                          │
-└─────────────────────────┬──────────────────────────────────────┘
-                          │
-┌─────────────────────────▼──────────────────────────────────────┐
-│                  RAW STORAGE (Parallel)                        │
-├────────────────────────────────────────────────────────────────┤
-│ upload_customers_parquet_to_s3                                │
-│ upload_call_logs_parquet_to_s3                                │
-│ upload_social_media_parquet_to_s3                             │
-└─────────────────────────┬──────────────────────────────────────┘
-                          │
-┌─────────────────────────▼──────────────────────────────────────┐
-│              SNOWFLAKE TABLE CREATION (Parallel)               │
-├────────────────────────────────────────────────────────────────┤
-│ create_customers_landing_table                                │
-│ create_call_logs_landing_table                                │
-│ create_social_media_landing_table                             │
-│ create_webforms_landing_table                                 │
-└─────────────────────────┬──────────────────────────────────────┘
-                          │
-┌─────────────────────────▼──────────────────────────────────────┐
-│                DATA LOADING (Parallel)                         │
-├────────────────────────────────────────────────────────────────┤
-│ load_customers_data_to_snowflake                              │
-│ load_call_logs_data_to_snowflake                              │
-│ load_social_media_data_to_snowflake                           │
-│ load_webforms_data_to_snowflake                               │
-└─────────────────────────┬──────────────────────────────────────┘
-                          │
-┌─────────────────────────▼──────────────────────────────────────┐
-│             DBT TRANSFORMATIONS (Sequential)                   │
-├────────────────────────────────────────────────────────────────┤
-│ STG_CUSTOMERS                                                  │
-│ STG_CALL_LOGS                                                  │
-│ STG_SOCIAL_MEDIA                                               │
-│ STG_WEBFORMS                                                   │
-│ + Data Quality Tests                                          │
-└────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 📐 Data Modeling
-
-### dbt Project Structure (`dags/dbt/core_telecoms/`)
-
-#### Bronze Layer (Staging Models)
-
-##### `STG_CUSTOMERS.sql`
-- **Purpose**: Clean and standardize customer master data
-- **Transformations**:
-  - Standardize column names (remove spaces, special characters)
-  - Parse and validate email addresses
-  - Standardize date formats
-  - Remove duplicates based on customer_id
-  - Add data quality flags
-
-##### `STG_CALL_LOGS.sql`
-- **Purpose**: Clean daily call center logs
-- **Transformations**:
-  - Standardize complaint categories
-  - Calculate call duration
-  - Parse call timestamps
-  - Validate foreign keys (customer_id, agent_id)
-  - Handle null resolution statuses
-
-##### `STG_SOCIAL_MEDIA.sql`
-- **Purpose**: Clean social media complaints
-- **Transformations**:
-  - Standardize platform names
-  - Parse JSON nested fields
-  - Validate date ranges
-  - Standardize complaint categories
-  - Handle missing agent assignments
-
-##### `STG_WEBFORMS.sql`
-- **Purpose**: Clean web form submissions
-- **Transformations**:
-  - Standardize column naming from source
-  - Parse request/resolution dates
-  - Validate customer and agent IDs
-  - Deduplicate submissions
-  - Handle form field variations
-
-#### Schema Testing (`schema.yml`)
-```yaml
-models:
-  - name: STG_CUSTOMERS
-    tests:
-      - dbt_utils.unique_combination_of_columns:
-          combination_of_columns: [customer_id, dag_run_date]
-    columns:
-      - name: customer_id
-        tests:
-          - not_null
-          - unique
-      - name: email
-        tests:
-          - not_null
-          - dbt_expectations.expect_column_values_to_match_regex:
-              regex: "^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+$"
-```
-
-### Data Quality Checks
-- **Not Null**: Critical fields cannot be null
-- **Uniqueness**: Primary keys are unique
-- **Referential Integrity**: Foreign keys exist in parent tables
-- **Data Type Validation**: Dates, emails, numeric ranges
-- **Custom Business Rules**: Via dbt macros
-
----
-
 ## 🔄 CI/CD Pipeline
 
 ### GitHub Actions Workflows
@@ -719,14 +539,6 @@ jobs:
     - Environment: Production
 ```
 
-### Container Registry
-- **Registry**: Docker Hub
-- **Repository**: `temmyzeus/core-telecoms-airflow`
-- **Tags**: 
-  - `latest`: Most recent build
-  - `v1.0.0`: Semantic versioning
-  - `<git-sha>`: Commit-specific builds
-
 ---
 
 ## ✅ Best Practices Implemented
@@ -768,18 +580,6 @@ default_args = {
 - Task logs for debugging
 - Metadata tracking (load_timestamp, dag_run_date)
 - Email alerts on failures (configured in Airflow)
-
-### 7. Scalability
-- Parallelized task execution
-- Parquet columnar format for efficient querying
-- Snowflake auto-scaling compute
-- S3 for unlimited storage
-
-### 8. Code Quality
-- Modular design with reusable utilities
-- Type hints in Python code
-- Comprehensive docstrings
-- PEP8 compliant formatting
 
 ---
 
@@ -843,104 +643,3 @@ docker-compose exec webserver airflow dags list
 # Check task instances
 docker-compose exec webserver airflow tasks list customer_complaints_pipeline
 ```
-
----
-
-## 📊 Monitoring and Alerts
-
-### Airflow Monitoring
-- **UI Dashboard**: http://localhost:8080
-- **Metrics**:
-  - DAG run success/failure rates
-  - Task duration trends
-  - Queue depths
-  - Resource utilization
-
-### Alerts Configuration
-```python
-# Email on failure
-default_args = {
-    "email": ["team@coretelecoms.com"],
-    "email_on_failure": True,
-    "email_on_retry": False
-}
-
-# Slack notifications (configured via webhooks)
-# PagerDuty integration for critical failures
-```
-
-### Data Quality Monitoring
-- dbt test results logged to Snowflake
-- Custom data quality dashboard
-- Automated anomaly detection
-
----
-
-## 🔮 Future Enhancements
-
-### Phase 2 Roadmap
-1. **Real-time Streaming**
-   - Kafka/Kinesis for real-time complaint ingestion
-   - Stream processing with Apache Flink
-
-2. **Machine Learning**
-   - Complaint category auto-classification
-   - Sentiment analysis on social media
-   - Churn prediction models
-   - Agent performance optimization
-
-3. **Advanced Analytics**
-   - Gold layer dimensional models
-   - Customer 360 views
-   - Complaint trend analysis
-   - Root cause analysis
-
-4. **Enhanced Observability**
-   - OpenTelemetry integration
-   - Distributed tracing
-   - Custom metrics and dashboards
-   - Alerting enhancements
-
-5. **Cost Optimization**
-   - S3 lifecycle policies
-   - Snowflake query optimization
-   - Resource right-sizing
-
-6. **Data Governance**
-   - Data catalog (Datahub, Amundsen)
-   - Data lineage tracking
-   - PII detection and masking
-   - GDPR compliance features
-
----
-
-## 👥 Contributors
-
-- **Temiloluwa Awoyele** - Lead Data Engineer
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License.
-
----
-
-## 🙏 Acknowledgments
-
-- Core Data Engineers Cohort
-- Apache Airflow Community
-- dbt Community
-- Snowflake Documentation
-
----
-
-## 📞 Contact
-
-For questions or support, please reach out on Slack or email team@coretelecoms.com
-
----
-
-**Project Status**: ✅ Production Ready
-
-**Last Updated**: December 7, 2025
