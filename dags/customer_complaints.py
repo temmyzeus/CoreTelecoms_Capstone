@@ -1,12 +1,13 @@
 import os
 from pathlib import Path
+from datetime import datetime, timedelta
 
 from airflow.sdk import dag, task, Variable
 from airflow.providers.common.io.operators.file_transfer import FileTransferOperator
 from airflow.providers.amazon.aws.transfers.google_api_to_s3 import GoogleApiToS3Operator
 from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
 from airflow.providers.snowflake.transfers.copy_into_snowflake import CopyFromExternalStageToSnowflakeOperator
-from cosmos import DbtTaskGroup, ExecutionConfig, ExecutionMode, ProfileConfig, ProjectConfig
+from cosmos import DbtTaskGroup, ExecutionConfig, ExecutionMode, ProfileConfig, ProjectConfig, RenderConfig
 from cosmos.profiles import SnowflakeUserPasswordProfileMapping
 import pendulum
 
@@ -37,7 +38,13 @@ profile_config = ProfileConfig(
 )
 
 default_args: dict = {
-    "owner": "Temiloluwa Awoyele"
+    'owner': 'Temiloluwa Awoyele',
+    'email': ['awoyeletemillues@gmail.com'],
+    'email_on_failure': True,
+    'email_on_retry': False,
+    'email_on_success': False,
+    'retries': 3,
+    'retry_delay': timedelta(minutes=5)
 }
 
 @dag(
@@ -56,24 +63,8 @@ def customer_complaints_pipeline():
     ### CoreTelecoms Unified Data Platform Pipeline
     """
 
-    venv_dbt_task_group = DbtTaskGroup(
-        group_id = "Staging_Transformations",
-        project_config=ProjectConfig(
-            dbt_project_path=DBT_PROJECT_PATH,
-            dbt_vars={
-                "run_date": "{{ ds }}"
-            }
-        ),
-        profile_config=profile_config,
-        execution_config = ExecutionConfig(
-            execution_mode=ExecutionMode.VIRTUALENV,
-            dbt_executable_path=os.path.join(os.environ["AIRFLOW_HOME"], "dbt_venv", "bin", "dbt"),
-            virtualenv_dir="/opt/airflow/dbt_venv"
-        )
-    )
-
-    venv_dbt_gold_task_group = DbtTaskGroup(
-        group_id = "Gold_Transformations",
+    dbt_bronze = DbtTaskGroup(
+        group_id = "DBT_Transformations",
         project_config=ProjectConfig(
             dbt_project_path=DBT_PROJECT_PATH,
             dbt_vars={
@@ -428,6 +419,6 @@ def customer_complaints_pipeline():
     uploaded_social_media_parquet >> create_social_media_landing_table >> load_social_media_data_to_snowflake
     web_forms_to_s3 >> create_webforms_landing_table >> load_webforms_data_to_snowflake
 
-    [load_customers_data_to_snowflake, load_call_logs_data_to_snowflake, load_social_media_data_to_snowflake, load_webforms_data_to_snowflake] >> venv_dbt_task_group
+    [load_customers_data_to_snowflake, load_call_logs_data_to_snowflake, load_social_media_data_to_snowflake, load_webforms_data_to_snowflake] >> dbt_bronze
 
 customer_complaints_pipeline()
